@@ -40,7 +40,13 @@ const Rules: React.FC = () => {
   };
 
   useEffect(() => {
-      getAccountDetails().then(setAccounts);
+      getAccountDetails().then((accounts) => {
+        setAccounts(accounts);
+        // 自动选择第一个账号
+        if (accounts.length > 0 && !selectedAccountId) {
+          setSelectedAccountId(accounts[0].id);
+        }
+      });
   }, []);
 
   useEffect(() => {
