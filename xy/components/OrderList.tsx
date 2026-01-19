@@ -360,14 +360,19 @@ const OrderList: React.FC = () => {
       {showDetailModal && selectedOrder && (
         <div className="modal-overlay">
           <div className="modal-container">
-            <button
-              onClick={() => setShowDetailModal(false)}
-              className="absolute top-6 right-6 p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
-            >
-              <X className="w-5 h-5 text-gray-600" />
-            </button>
+            <div className="modal-header">
+              <div className="flex items-center justify-between w-full">
+                <h3 className="text-2xl font-extrabold text-gray-900">订单详情</h3>
+                <button
+                  onClick={() => setShowModal(false)}
+                  className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
+                >
+                  <X className="w-5 h-5 text-gray-600" />
+                </button>
+              </div>
+            </div>
 
-            <h3 className="text-2xl font-extrabold text-gray-900 mb-6">订单详情</h3>
+            <div className="modal-body space-y-5">
 
             <div className="space-y-6">
               {/* Order Info */}
@@ -444,24 +449,26 @@ const OrderList: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex gap-3 mt-6">
-              <button
-                onClick={() => setShowDetailModal(false)}
-                className="flex-1 px-6 py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold transition-colors"
-              >
-                关闭
-              </button>
-              {selectedOrder.status === 'pending_ship' && (
+            <div className="modal-footer">
+              <div className="flex gap-3 w-full">
                 <button
-                  onClick={() => {
-                    handleShip(selectedOrder.order_id);
-                    setShowDetailModal(false);
-                  }}
-                  className="flex-1 px-6 py-3 rounded-xl ios-btn-primary font-bold shadow-lg shadow-yellow-200"
+                  onClick={() => setShowDetailModal(false)}
+                  className="flex-1 px-6 py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold transition-colors"
                 >
-                  立即发货
+                  关闭
                 </button>
-              )}
+                {selectedOrder.status === 'pending_ship' && (
+                  <button
+                    onClick={() => {
+                      handleShip(selectedOrder.order_id);
+                      setShowDetailModal(false);
+                    }}
+                    className="flex-1 px-6 py-3 rounded-xl ios-btn-primary font-bold shadow-lg shadow-yellow-200"
+                  >
+                    立即发货
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -471,14 +478,19 @@ const OrderList: React.FC = () => {
       {showImportModal && (
         <div className="modal-overlay">
           <div className="modal-container">
-            <button
-              onClick={() => setShowImportModal(false)}
-              className="absolute top-6 right-6 p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
-            >
-              <X className="w-5 h-5 text-gray-600" />
-            </button>
+            <div className="modal-header">
+              <div className="flex items-center justify-between w-full">
+                <h3 className="text-2xl font-extrabold text-gray-900">插入订单</h3>
+                <button
+                  onClick={() => setShowModal(false)}
+                  className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
+                >
+                  <X className="w-5 h-5 text-gray-600" />
+                </button>
+              </div>
+            </div>
 
-            <h3 className="text-2xl font-extrabold text-gray-900 mb-6">插入订单</h3>
+            <div className="modal-body space-y-5">
 
             <div className="space-y-5">
               <div>
@@ -502,20 +514,22 @@ const OrderList: React.FC = () => {
               )}
             </div>
 
-            <div className="flex gap-3 mt-6">
-              <button
-                onClick={() => setShowImportModal(false)}
-                className="flex-1 px-6 py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold transition-colors"
-              >
-                取消
-              </button>
-              <button
-                onClick={handleImport}
-                disabled={!importFile}
-                className="flex-1 px-6 py-3 rounded-xl ios-btn-primary font-bold shadow-lg shadow-yellow-200 disabled:opacity-50"
-              >
-                导入订单
-              </button>
+            <div className="modal-footer">
+              <div className="flex gap-3 w-full">
+                <button
+                  onClick={() => setShowImportModal(false)}
+                  className="flex-1 px-6 py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold transition-colors"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleImport}
+                  disabled={!importFile}
+                  className="flex-1 px-6 py-3 rounded-xl ios-btn-primary font-bold shadow-lg shadow-yellow-200 disabled:opacity-50"
+                >
+                  导入订单
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -523,18 +537,21 @@ const OrderList: React.FC = () => {
 
       {/* Edit Modal */}
       {showEditModal && editingOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md animate-fade-in p-4 overflow-y-auto">
-          <div className="bg-white rounded-[2.5rem] p-8 max-w-2xl w-full shadow-2xl relative my-8">
-            <button
-              onClick={() => setShowEditModal(false)}
-              className="absolute top-6 right-6 p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
-            >
-              <X className="w-5 h-5 text-gray-600" />
-            </button>
+        <div className="modal-overlay">
+          <div className="modal-container">
+            <div className="modal-header">
+              <div className="flex items-center justify-between w-full">
+                <h3 className="text-2xl font-extrabold text-gray-900">编辑订单</h3>
+                <button
+                  onClick={() => setShowEditModal(false)}
+                  className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
+                >
+                  <X className="w-5 h-5 text-gray-600" />
+                </button>
+              </div>
+            </div>
 
-            <h3 className="text-2xl font-extrabold text-gray-900 mb-6">编辑订单</h3>
-
-            <div className="space-y-5 max-h-[70vh] overflow-y-auto pr-2">
+            <div className="modal-body space-y-5">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-bold text-gray-700 mb-2">订单号</label>
@@ -646,20 +663,22 @@ const OrderList: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex gap-3 mt-6 pt-6 border-t border-gray-200">
-              <button
-                onClick={() => setShowEditModal(false)}
-                className="flex-1 px-6 py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold transition-colors"
-              >
-                取消
-              </button>
-              <button
-                onClick={handleSaveEdit}
-                className="flex-1 px-6 py-3 rounded-xl ios-btn-primary font-bold shadow-lg shadow-yellow-200 flex items-center justify-center gap-2"
-              >
-                <Save className="w-5 h-5" />
-                保存修改
-              </button>
+            <div className="modal-footer">
+              <div className="flex gap-3 w-full">
+                <button
+                  onClick={() => setShowEditModal(false)}
+                  className="flex-1 px-6 py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold transition-colors"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleSaveEdit}
+                  className="flex-1 px-6 py-3 rounded-xl ios-btn-primary font-bold shadow-lg shadow-yellow-200 flex items-center justify-center gap-2"
+                >
+                  <Save className="w-5 h-5" />
+                  保存修改
+                </button>
+              </div>
             </div>
           </div>
         </div>

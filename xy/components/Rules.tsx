@@ -315,16 +315,21 @@ const Rules: React.FC = () => {
       {showShippingModal && (
         <div className="modal-overlay">
           <div className="modal-container">
-            <button
-              onClick={() => setShowShippingModal(false)}
-              className="absolute top-6 right-6 p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
-            >
-              <X className="w-5 h-5 text-gray-600" />
-            </button>
-
-            <h3 className="text-2xl font-extrabold text-gray-900 mb-6">
+            <div className="modal-header">
+              <div className="flex items-center justify-between w-full">
+                <h3 className="text-2xl font-extrabold text-gray-900">
               {editingShippingRule ? '编辑发货规则' : '新增发货规则'}
             </h3>
+                <button
+                  onClick={() => setShowModal(false)}
+                  className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
+                >
+                  <X className="w-5 h-5 text-gray-600" />
+                </button>
+              </div>
+            </div>
+
+            <div className="modal-body space-y-5">
 
             <div className="space-y-5">
               <div>
@@ -395,20 +400,22 @@ const Rules: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex gap-3 mt-6">
-              <button
-                onClick={() => setShowShippingModal(false)}
-                className="flex-1 px-6 py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold transition-colors"
-              >
-                取消
-              </button>
-              <button
-                onClick={handleSaveShipping}
-                className="flex-1 px-6 py-3 rounded-xl ios-btn-primary font-bold shadow-lg shadow-yellow-200 flex items-center justify-center gap-2"
-              >
-                <Save className="w-5 h-5" />
-                保存规则
-              </button>
+            <div className="modal-footer">
+              <div className="flex gap-3 w-full">
+                <button
+                  onClick={() => setShowShippingModal(false)}
+                  className="flex-1 px-6 py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold transition-colors"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleSaveShipping}
+                  className="flex-1 px-6 py-3 rounded-xl ios-btn-primary font-bold shadow-lg shadow-yellow-200 flex items-center justify-center gap-2"
+                >
+                  <Save className="w-5 h-5" />
+                  保存规则
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -418,16 +425,21 @@ const Rules: React.FC = () => {
       {showReplyModal && (
         <div className="modal-overlay">
           <div className="modal-container">
-            <button
-              onClick={() => setShowReplyModal(false)}
-              className="absolute top-6 right-6 p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
-            >
-              <X className="w-5 h-5 text-gray-600" />
-            </button>
-
-            <h3 className="text-2xl font-extrabold text-gray-900 mb-6">
+            <div className="modal-header">
+              <div className="flex items-center justify-between w-full">
+                <h3 className="text-2xl font-extrabold text-gray-900">
               {editingReplyRule ? '编辑回复规则' : '新增回复规则'}
             </h3>
+                <button
+                  onClick={() => setShowModal(false)}
+                  className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
+                >
+                  <X className="w-5 h-5 text-gray-600" />
+                </button>
+              </div>
+            </div>
+
+            <div className="modal-body space-y-5">
 
             <div className="space-y-5">
               <div>
@@ -498,20 +510,22 @@ const Rules: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex gap-3 mt-6">
-              <button
-                onClick={() => setShowReplyModal(false)}
-                className="flex-1 px-6 py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold transition-colors"
-              >
-                取消
-              </button>
-              <button
-                onClick={handleSaveReply}
-                className="flex-1 px-6 py-3 rounded-xl ios-btn-primary font-bold shadow-lg shadow-yellow-200 flex items-center justify-center gap-2"
-              >
-                <Save className="w-5 h-5" />
-                保存规则
-              </button>
+            <div className="modal-footer">
+              <div className="flex gap-3 w-full">
+                <button
+                  onClick={() => setShowReplyModal(false)}
+                  className="flex-1 px-6 py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold transition-colors"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleSaveReply}
+                  className="flex-1 px-6 py-3 rounded-xl ios-btn-primary font-bold shadow-lg shadow-yellow-200 flex items-center justify-center gap-2"
+                >
+                  <Save className="w-5 h-5" />
+                  保存规则
+                </button>
+              </div>
             </div>
           </div>
         </div>
