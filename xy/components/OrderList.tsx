@@ -39,8 +39,10 @@ const OrderList: React.FC = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [editingOrder, setEditingOrder] = useState<Partial<Order> | null>(null);
   const [editForm, setEditForm] = useState<Partial<Order>>({});
   const [importText, setImportText] = useState('');
+  const [importFile, setImportFile] = useState<File | null>(null);
 
   const loadOrders = () => {
       setLoading(true);
@@ -262,7 +264,7 @@ const OrderList: React.FC = () => {
               <div className="flex items-center justify-between w-full">
                 <h3 className="text-2xl font-extrabold text-gray-900">订单详情</h3>
                 <button
-                  onClick={() => setShowModal(false)}
+                  onClick={() => setShowDetailModal(false)}
                   className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
                 >
                   <X className="w-5 h-5 text-gray-600" />
@@ -366,6 +368,9 @@ const OrderList: React.FC = () => {
                 )}
               </div>
             </div>
+          </div>
+        </div>
+      )}
 
       {/* Import Modal */}
       {showImportModal && (
@@ -375,7 +380,7 @@ const OrderList: React.FC = () => {
               <div className="flex items-center justify-between w-full">
                 <h3 className="text-2xl font-extrabold text-gray-900">插入订单</h3>
                 <button
-                  onClick={() => setShowModal(false)}
+                  onClick={() => setShowImportModal(false)}
                   className="p-2 bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
                 >
                   <X className="w-5 h-5 text-gray-600" />
@@ -402,7 +407,8 @@ const OrderList: React.FC = () => {
                     <span className="text-sm font-medium text-blue-900">{importFile.name}</span>
                   </div>
                 </div>
-              </div>
+              )}
+            </div>
 
             <div className="modal-footer">
               <div className="flex gap-3 w-full">
@@ -413,7 +419,7 @@ const OrderList: React.FC = () => {
                   取消
                 </button>
                 <button
-                  onClick={handleImport}
+                  onClick={handleImportOrders}
                   disabled={!importFile}
                   className="flex-1 px-6 py-3 rounded-xl ios-btn-primary font-bold shadow-lg shadow-yellow-200 disabled:opacity-50"
                 >
@@ -531,122 +537,6 @@ const OrderList: React.FC = () => {
                 />
               </div>
 
-            <div className="overflow-y-auto flex-1 -mr-2 pr-2 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">商品ID</label>
-                  <input
-                    type="text"
-                    value={editForm.item_id || ''}
-                    onChange={(e) => setEditForm({ ...editForm, item_id: e.target.value })}
-                    className="w-full ios-input px-4 py-3 rounded-xl"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">买家ID</label>
-                  <input
-                    type="text"
-                    value={editForm.buyer_id || ''}
-                    onChange={(e) => setEditForm({ ...editForm, buyer_id: e.target.value })}
-                    className="w-full ios-input px-4 py-3 rounded-xl"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">规格名称</label>
-                  <input
-                    type="text"
-                    value={editForm.spec_name || ''}
-                    onChange={(e) => setEditForm({ ...editForm, spec_name: e.target.value })}
-                    className="w-full ios-input px-4 py-3 rounded-xl"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">规格值</label>
-                  <input
-                    type="text"
-                    value={editForm.spec_value || ''}
-                    onChange={(e) => setEditForm({ ...editForm, spec_value: e.target.value })}
-                    className="w-full ios-input px-4 py-3 rounded-xl"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">数量</label>
-                  <input
-                    type="number"
-                    value={editForm.quantity || 1}
-                    onChange={(e) => setEditForm({ ...editForm, quantity: parseInt(e.target.value) })}
-                    className="w-full ios-input px-4 py-3 rounded-xl"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">金额</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={editForm.amount || 0}
-                    onChange={(e) => setEditForm({ ...editForm, amount: parseFloat(e.target.value) })}
-                    className="w-full ios-input px-4 py-3 rounded-xl"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">订单状态</label>
-                <select
-                  value={editForm.status || 'processing'}
-                  onChange={(e) => setEditForm({ ...editForm, status: e.target.value as OrderStatus })}
-                  className="w-full ios-input px-4 py-3 rounded-xl"
-                >
-                  <option value="processing">处理中</option>
-                  <option value="pending_ship">待发货</option>
-                  <option value="shipped">已发货</option>
-                  <option value="completed">已完成</option>
-                  <option value="cancelled">已取消</option>
-                  <option value="refunding">退款中</option>
-                </select>
-              </div>
-
-              <div className="border-t border-gray-100 pt-4">
-                <h4 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
-                  <MapPin className="w-4 h-4" />
-                  收货人信息
-                </h4>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-2">姓名</label>
-                    <input
-                      type="text"
-                      value={editForm.buyer_name || ''}
-                      onChange={(e) => setEditForm({ ...editForm, buyer_name: e.target.value })}
-                      className="w-full ios-input px-4 py-3 rounded-xl"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-2">手机</label>
-                    <input
-                      type="text"
-                      value={editForm.buyer_phone || ''}
-                      onChange={(e) => setEditForm({ ...editForm, buyer_phone: e.target.value })}
-                      className="w-full ios-input px-4 py-3 rounded-xl"
-                    />
-                  </div>
-                </div>
-                <div className="mt-4">
-                  <label className="block text-sm font-bold text-gray-700 mb-2">地址</label>
-                  <textarea
-                    value={editForm.buyer_address || ''}
-                    onChange={(e) => setEditForm({ ...editForm, buyer_address: e.target.value })}
-                    className="w-full ios-input px-4 py-3 rounded-xl h-24 resize-none"
-                  />
-                </div>
-              </div>
-
               <div className="flex gap-3 pt-4">
                 <button
                   onClick={() => setShowEditModal(false)}
@@ -660,41 +550,6 @@ const OrderList: React.FC = () => {
                 >
                   <Save className="w-4 h-4" />
                   保存更改
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 导入订单弹窗 */}
-      {showImportModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in p-4">
-          <div className="bg-white rounded-[2rem] p-8 max-w-lg w-full shadow-2xl animate-slide-up flex flex-col max-h-[90vh]">
-            <div className="flex justify-between items-center mb-6 flex-shrink-0">
-              <h3 className="text-2xl font-extrabold text-gray-900">导入订单</h3>
-              <button
-                onClick={() => setShowImportModal(false)}
-                className="p-2 rounded-xl hover:bg-gray-100 transition-colors"
-              >
-                <X className="w-5 h-5 text-gray-500" />
-              </button>
-            </div>
-
-            <div className="modal-footer">
-              <div className="flex gap-3 w-full">
-                <button
-                  onClick={() => setShowEditModal(false)}
-                  className="flex-1 px-6 py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold transition-colors"
-                >
-                  取消
-                </button>
-                <button
-                  onClick={handleSaveEdit}
-                  className="flex-1 px-6 py-3 rounded-xl ios-btn-primary font-bold shadow-lg shadow-yellow-200 flex items-center justify-center gap-2"
-                >
-                  <Save className="w-5 h-5" />
-                  保存修改
                 </button>
               </div>
             </div>

@@ -295,7 +295,6 @@ const ItemList: React.FC = () => {
                 </button>
               </div>
             </div>
-            </div>
 
             <div className="modal-footer">
               <div className="flex gap-3 w-full">
@@ -312,105 +311,6 @@ const ItemList: React.FC = () => {
                   <Save className="w-5 h-5" />
                   保存商品
                 </button>
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto -mr-2 pr-2">
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">所属账号</label>
-                  <select
-                    value={addForm.cookie_id}
-                    onChange={(e) => setAddForm({ ...addForm, cookie_id: e.target.value })}
-                    className="w-full ios-input px-4 py-3 rounded-xl"
-                  >
-                    <option value="">选择账号</option>
-                    {accounts.map(acc => (
-                      <option key={acc.id} value={acc.id}>{acc.nickname}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">商品ID</label>
-                  <input
-                    type="text"
-                    value={addForm.item_id}
-                    onChange={(e) => setAddForm({ ...addForm, item_id: e.target.value })}
-                    placeholder="输入商品ID"
-                    className="w-full ios-input px-4 py-3 rounded-xl font-mono text-sm"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">商品标题</label>
-                  <input
-                    type="text"
-                    value={addForm.item_title}
-                    onChange={(e) => setAddForm({ ...addForm, item_title: e.target.value })}
-                    placeholder="输入商品标题"
-                    className="w-full ios-input px-4 py-3 rounded-xl"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">价格</label>
-                  <input
-                    type="text"
-                    value={addForm.item_price}
-                    onChange={(e) => setAddForm({ ...addForm, item_price: e.target.value })}
-                    placeholder="例如: 99.00"
-                    className="w-full ios-input px-4 py-3 rounded-xl"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">图片URL</label>
-                  <input
-                    type="text"
-                    value={addForm.item_image}
-                    onChange={(e) => setAddForm({ ...addForm, item_image: e.target.value })}
-                    placeholder="https://..."
-                    className="w-full ios-input px-4 py-3 rounded-xl font-mono text-sm"
-                  />
-                </div>
-
-                <div className="flex gap-4">
-                  <button
-                    type="button"
-                    onClick={() => setAddForm({ ...addForm, is_multi_spec: !addForm.is_multi_spec })}
-                    className={`flex-1 p-4 rounded-xl font-bold transition-all ${
-                      addForm.is_multi_spec ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
-                    }`}
-                  >
-                    多规格: {addForm.is_multi_spec ? '开' : '关'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setAddForm({ ...addForm, is_multi_qty_ship: !addForm.is_multi_qty_ship })}
-                    className={`flex-1 p-4 rounded-xl font-bold transition-all ${
-                      addForm.is_multi_qty_ship ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
-                    }`}
-                  >
-                    多数量发货: {addForm.is_multi_qty_ship ? '开' : '关'}
-                  </button>
-                </div>
-
-                <div className="flex gap-3 pt-4">
-                  <button
-                    onClick={() => setShowAddModal(false)}
-                    className="flex-1 px-6 py-3 rounded-xl font-bold bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
-                  >
-                    取消
-                  </button>
-                  <button
-                    onClick={handleAddItem}
-                    className="flex-1 ios-btn-primary px-6 py-3 rounded-xl font-bold flex items-center justify-center gap-2"
-                  >
-                    <Plus className="w-4 h-4" />
-                    添加商品
-                  </button>
-                </div>
               </div>
             </div>
           </div>
