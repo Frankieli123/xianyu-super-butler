@@ -262,6 +262,9 @@ yarn-error.log*
 package-lock.json
 yarn.lock
 
+# Docker 构建需要前端 lockfile（否则 Dockerfile 的 npm ci 会失败）
+!frontend/package-lock.json
+
 # 前端构建
 dist/
 build/
