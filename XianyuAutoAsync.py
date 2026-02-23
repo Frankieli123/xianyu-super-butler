@@ -2801,6 +2801,8 @@ class XianyuLive:
                     'category_id': item.get('category_id', ''),
                     'auction_type': item.get('auction_type', ''),
                     'item_status': item.get('item_status', 0),
+                    # detail 字段用于保存商品描述文本（用于自动回复/搜索），避免与元数据互相覆盖
+                    'detail': '',
                     'detail_url': item.get('detail_url', ''),
                     'web_url': item.get('web_url', ''),  # Web可访问URL
                     'pic_info': item.get('pic_info', {}),
@@ -2813,6 +2815,31 @@ class XianyuLive:
                 # 检查数据库中是否已有详情
                 existing_item = db_manager.get_item_info(self.cookie_id, item_id)
                 has_detail = existing_item and existing_item.get('item_detail') and existing_item['item_detail'].strip()
+
+                # 合并已有的详情文本/手动图片，避免旧数据为纯文本时导致前端无法抽取图片
+                try:
+                    existing_raw_detail = (existing_item.get('item_detail') or '').strip() if existing_item else ''
+                    existing_detail_text = ''
+                    existing_item_image = ''
+
+                    if existing_raw_detail:
+                        try:
+                            parsed_existing = json.loads(existing_raw_detail)
+                        except Exception:
+                            parsed_existing = None
+
+                        if isinstance(parsed_existing, dict):
+                            existing_detail_text = str(parsed_existing.get('detail') or parsed_existing.get('raw') or '').strip()
+                            existing_item_image = str(parsed_existing.get('item_image') or parsed_existing.get('itemImage') or '').strip()
+                        else:
+                            existing_detail_text = existing_raw_detail
+
+                    if existing_detail_text and not item_detail.get('detail'):
+                        item_detail['detail'] = existing_detail_text
+                    if existing_item_image and not item_detail.get('item_image'):
+                        item_detail['item_image'] = existing_item_image
+                except Exception:
+                    pass
 
                 batch_data.append({
                     'cookie_id': self.cookie_id,
@@ -3020,11 +3047,18 @@ class XianyuLive:
             # 方法1: 从message["1"]中提取（如果是字符串格式）
             message_1 = message.get('1')
             if isinstance(message_1, str):
-                # 尝试从字符串中提取数字ID
-                id_match = re.search(r'(\d{10,})', message_1)
-                if id_match:
-                    logger.info(f"从message[1]字符串中提取商品ID: {id_match.group(1)}")
-                    return id_match.group(1)
+                # 仅在字符串明确包含 itemId 参数时提取，避免误把消息ID/PNM当成商品ID
+                patterns = [
+                    r'itemId=(\d{10,})',
+                    r'item_id=(\d{10,})',
+                    r'"itemId"\s*:\s*"?(\d{10,})"?',
+                    r'"item_id"\s*:\s*"?(\d{10,})"?',
+                ]
+                for pattern in patterns:
+                    id_match = re.search(pattern, message_1)
+                    if id_match:
+                        logger.info(f"从message[1]字符串中提取商品ID: {id_match.group(1)}")
+                        return id_match.group(1)
 
             # 方法2: 从message["3"]中提取
             message_3 = message.get('3', {})
@@ -3068,7 +3102,7 @@ class XianyuLive:
             def find_item_id_recursive(obj, path=""):
                 if isinstance(obj, dict):
                     # 直接查找itemId字段
-                    for key in ['itemId', 'item_id', 'id']:
+                    for key in ['itemId', 'item_id', 'itemid']:
                         if key in obj and isinstance(obj[key], (str, int)):
                             value = str(obj[key])
                             if len(value) >= 10 and value.isdigit():
@@ -3082,11 +3116,18 @@ class XianyuLive:
                             return result
 
                 elif isinstance(obj, str):
-                    # 从字符串中提取可能的商品ID
-                    id_match = re.search(r'(\d{10,})', obj)
-                    if id_match:
-                        logger.info(f"从{path}字符串中提取商品ID: {id_match.group(1)}")
-                        return id_match.group(1)
+                    # 仅从包含 itemId/item_id 参数的字符串中提取，避免误识别订单号/消息ID
+                    patterns = [
+                        r'itemId=(\d{10,})',
+                        r'item_id=(\d{10,})',
+                        r'"itemId"\s*:\s*"?(\d{10,})"?',
+                        r'"item_id"\s*:\s*"?(\d{10,})"?',
+                    ]
+                    for pattern in patterns:
+                        id_match = re.search(pattern, obj)
+                        if id_match:
+                            logger.info(f"从{path}字符串中提取商品ID: {id_match.group(1)}")
+                            return id_match.group(1)
 
                 return None
 
@@ -3099,6 +3140,48 @@ class XianyuLive:
 
         except Exception as e:
             logger.error(f"提取商品ID失败: {self._safe_str(e)}")
+            return None
+
+    def extract_peer_user_id_from_message(self, message):
+        """从消息中提取对端用户ID（通常为买家ID）"""
+        try:
+            def find_peer_user_id(obj, path=""):
+                if isinstance(obj, dict):
+                    if 'peerUserId' in obj and isinstance(obj['peerUserId'], (str, int)):
+                        v = str(obj['peerUserId'])
+                        if len(v) >= 6 and v.isdigit():
+                            logger.info(f"从{path}.peerUserId中提取到用户ID: {v}")
+                            return v
+
+                    if 'senderUserId' in obj and isinstance(obj['senderUserId'], (str, int)):
+                        v = str(obj['senderUserId'])
+                        if len(v) >= 6 and v.isdigit():
+                            logger.info(f"从{path}.senderUserId中提取到用户ID: {v}")
+                            return v
+
+                    for k, v in obj.items():
+                        r = find_peer_user_id(v, f"{path}.{k}" if path else k)
+                        if r:
+                            return r
+
+                elif isinstance(obj, list):
+                    for idx, v in enumerate(obj):
+                        r = find_peer_user_id(v, f"{path}[{idx}]")
+                        if r:
+                            return r
+
+                elif isinstance(obj, str):
+                    # 从URL参数中提取 peerUserId
+                    m = re.search(r'peerUserId=(\d{6,})', obj)
+                    if m:
+                        logger.info(f"从{path}字符串中提取到peerUserId: {m.group(1)}")
+                        return m.group(1)
+
+                return None
+
+            return find_peer_user_id(message)
+        except Exception as e:
+            logger.error(f"提取peerUserId失败: {self._safe_str(e)}")
             return None
 
     def debug_message_structure(self, message, context=""):
@@ -7541,13 +7624,13 @@ class XianyuLive:
                             elif isinstance(message_1, dict):
                                 # 从字典中提取用户ID
                                 if "10" in message_1 and isinstance(message_1["10"], dict):
-                                    temp_user_id = message_1["10"].get("senderUserId", "unknown_user")
-                                else:
-                                    temp_user_id = "unknown_user"
-                            else:
-                                temp_user_id = "unknown_user"
+                                    temp_user_id = message_1["10"].get("senderUserId") or None
                         except:
-                            temp_user_id = "unknown_user"
+                            temp_user_id = None
+
+                        # 某些更新类消息不在 message["1"]["10"] 中携带 senderUserId，此处从 reminderUrl/peerUserId 兜底提取
+                        if not temp_user_id:
+                            temp_user_id = self.extract_peer_user_id_from_message(message)
 
                         # 提取商品ID
                         try:
@@ -7597,6 +7680,11 @@ class XianyuLive:
             except Exception as e:
                 logger.warning(f"提取用户ID失败: {self._safe_str(e)}")
                 user_id = "unknown_user"
+
+            if not user_id or user_id == "unknown_user":
+                peer_user_id = self.extract_peer_user_id_from_message(message)
+                if peer_user_id:
+                    user_id = peer_user_id
 
 
 

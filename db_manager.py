@@ -253,7 +253,17 @@ class DBManager:
                 self._execute_sql(cursor, "ALTER TABLE orders ADD COLUMN receiver_name TEXT DEFAULT ''")
                 self._execute_sql(cursor, "ALTER TABLE orders ADD COLUMN receiver_phone TEXT DEFAULT ''")
                 self._execute_sql(cursor, "ALTER TABLE orders ADD COLUMN receiver_address TEXT DEFAULT ''")
+                self._execute_sql(cursor, "ALTER TABLE orders ADD COLUMN receiver_city TEXT DEFAULT ''")
                 logger.info("orders 表收货人信息列添加完成")
+
+            # 检查并添加 receiver_city 列（用于BI统计与订单地址信息）
+            # 旧数据库可能已包含 receiver_name/phone/address，但缺少 receiver_city
+            try:
+                self._execute_sql(cursor, "SELECT receiver_city FROM orders LIMIT 1")
+            except sqlite3.OperationalError:
+                logger.info("正在为 orders 表添加 receiver_city 列...")
+                self._execute_sql(cursor, "ALTER TABLE orders ADD COLUMN receiver_city TEXT DEFAULT ''")
+                logger.info("orders 表 receiver_city 列添加完成")
 
             # 检查并添加 version 列（用于乐观锁）
             try:
@@ -811,6 +821,14 @@ class DBManager:
                     # receiver_address字段不存在，需要添加
                     self._execute_sql(cursor, "ALTER TABLE orders ADD COLUMN receiver_address TEXT")
                     logger.info("为orders表添加receiver_address字段")
+
+                # 检查orders表是否有receiver_city字段
+                try:
+                    self._execute_sql(cursor, "SELECT receiver_city FROM orders LIMIT 1")
+                except sqlite3.OperationalError:
+                    # receiver_city字段不存在，需要添加
+                    self._execute_sql(cursor, "ALTER TABLE orders ADD COLUMN receiver_city TEXT DEFAULT ''")
+                    logger.info("为orders表添加receiver_city字段")
 
                 # 检查orders表是否有system_shipped字段（系统是否已发货）
                 try:
@@ -3746,6 +3764,36 @@ class DBManager:
 
     # ==================== 商品信息管理 ====================
 
+    def _extract_item_image_url(self, item_detail_parsed: Any) -> str:
+        """从 item_detail 解析结果中提取商品图片 URL（用于前端展示）"""
+        if not isinstance(item_detail_parsed, dict):
+            return ''
+
+        candidates: List[Any] = [
+            item_detail_parsed.get('item_image'),
+            item_detail_parsed.get('itemImage'),
+        ]
+
+        pic_info = item_detail_parsed.get('pic_info') or item_detail_parsed.get('picInfo')
+        if isinstance(pic_info, dict):
+            candidates.extend([pic_info.get('picUrl'), pic_info.get('pic_url'), pic_info.get('url')])
+
+        detail_params = item_detail_parsed.get('detail_params') or item_detail_parsed.get('detailParams')
+        if isinstance(detail_params, dict):
+            candidates.extend([detail_params.get('picUrl'), detail_params.get('pic_url')])
+
+        for url in candidates:
+            if not isinstance(url, str):
+                continue
+            u = url.strip()
+            if not u:
+                continue
+            if u.startswith('http://'):
+                u = 'https://' + u[len('http://'):]
+            return u
+
+        return ''
+
     def save_item_basic_info(self, cookie_id: str, item_id: str, item_title: str = None,
                             item_description: str = None, item_category: str = None,
                             item_price: str = None, item_detail: str = None) -> bool:
@@ -3959,6 +4007,7 @@ class DBManager:
                             item_info['item_detail_parsed'] = json.loads(item_info['item_detail'])
                         except:
                             item_info['item_detail_parsed'] = {}
+                    item_info['item_image'] = self._extract_item_image_url(item_info.get('item_detail_parsed'))
                     logger.info(f"item_info: {item_info}")
                     return item_info
                 return None
@@ -4083,6 +4132,7 @@ class DBManager:
                             item_info['item_detail_parsed'] = json.loads(item_info['item_detail'])
                         except:
                             item_info['item_detail_parsed'] = {}
+                    item_info['item_image'] = self._extract_item_image_url(item_info.get('item_detail_parsed'))
 
                     items.append(item_info)
 
@@ -4118,6 +4168,7 @@ class DBManager:
                             item_info['item_detail_parsed'] = json.loads(item_info['item_detail'])
                         except:
                             item_info['item_detail_parsed'] = {}
+                    item_info['item_image'] = self._extract_item_image_url(item_info.get('item_detail_parsed'))
 
                     items.append(item_info)
 
@@ -4256,7 +4307,7 @@ class DBManager:
                                 item_description = CASE WHEN (item_description IS NULL OR item_description = '') AND ? != '' THEN ? ELSE item_description END,
                                 item_category = CASE WHEN (item_category IS NULL OR item_category = '') AND ? != '' THEN ? ELSE item_category END,
                                 item_price = CASE WHEN (item_price IS NULL OR item_price = '') AND ? != '' THEN ? ELSE item_price END,
-                                item_detail = CASE WHEN (item_detail IS NULL OR item_detail = '' OR TRIM(item_detail) = '') AND ? != '' THEN ? ELSE item_detail END,
+                                item_detail = CASE WHEN ? != '' AND (item_detail IS NULL OR item_detail = '' OR TRIM(item_detail) = '' OR SUBSTR(LTRIM(item_detail), 1, 1) != '{') THEN ? ELSE item_detail END,
                                 updated_at = CURRENT_TIMESTAMP
                             WHERE cookie_id = ? AND item_id = ?
                             '''
@@ -4712,7 +4763,8 @@ class DBManager:
                 # 先尝试查询包含version的订单
                 cursor.execute('''
                 SELECT order_id, item_id, buyer_id, spec_name, spec_value,
-                       quantity, amount, order_status, cookie_id, is_bargain, created_at, updated_at, version, chat_id
+                       quantity, amount, order_status, cookie_id, is_bargain, created_at, updated_at, version, chat_id,
+                       receiver_name, receiver_phone, receiver_address, receiver_city, system_shipped
                 FROM orders WHERE order_id = ?
                 ''', (order_id,))
 
@@ -4734,7 +4786,12 @@ class DBManager:
                         'created_at': row[10],
                         'updated_at': row[11],
                         'version': row[12] if len(row) > 12 else 1,  # 默认版本为1
-                        'chat_id': row[13] if len(row) > 13 else ''
+                        'chat_id': row[13] if len(row) > 13 else '',
+                        'receiver_name': row[14] if len(row) > 14 else '',
+                        'receiver_phone': row[15] if len(row) > 15 else '',
+                        'receiver_address': row[16] if len(row) > 16 else '',
+                        'receiver_city': row[17] if len(row) > 17 else '',
+                        'system_shipped': bool(row[18]) if len(row) > 18 and row[18] is not None else False,
                     }
                 return None
 

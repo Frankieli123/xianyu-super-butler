@@ -261,14 +261,22 @@ const OrderList: React.FC = () => {
 
   const handleImportOrders = async () => {
     try {
-      const orders = JSON.parse(importText);
-      await importOrders(Array.isArray(orders) ? orders : [orders]);
+      if (!importFile) {
+        alert('请选择要导入的Excel文件');
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('file', importFile);
+      const res = await importOrders(formData);
+
       setShowImportModal(false);
-      setImportText('');
+      setImportFile(null);
       loadOrders();
-      alert('订单导入成功');
+      alert(`订单导入结果：成功 ${res?.success_count || 0} 条，失败 ${res?.failed_count || 0} 条`);
     } catch (error) {
-      alert('导入失败，请检查JSON格式');
+      console.error('导入订单失败:', error);
+      alert('导入失败，请重试');
     }
   };
 

@@ -160,7 +160,8 @@ export const manualShipOrder = async (orderIds: string[], shipMode: 'status_only
 
 export const importOrders = async (data: Partial<Order>[] | FormData): Promise<any> => {
   const isFormData = data instanceof FormData;
-  const response = await fetch('/api/orders/import', {
+  const url = isFormData ? '/api/orders/import-excel' : '/api/orders/import';
+  const response = await fetch(url, {
     method: 'POST',
     headers: {
       ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
@@ -239,7 +240,7 @@ export const deleteItem = async (cookieId: string, itemId: string): Promise<any>
 }
 
 export const createItem = async (cookieId: string, data: any): Promise<any> => {
-    return post(`/items/${cookieId}`, data);
+    return post(`/items/cookie/${cookieId}`, data);
 }
 
 export const updateItem = async (cookieId: string, itemId: string, data: any): Promise<any> => {

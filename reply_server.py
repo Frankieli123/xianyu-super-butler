@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, status, UploadFile, File, Form, Body, Query
+from fastapi import FastAPI, HTTPException, Depends, status, UploadFile, File, Form, Body, Query, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -622,14 +622,15 @@ async def login(request: LoginRequest):
 # 验证token接口
 @app.get('/verify')
 async def verify(user_info: Optional[Dict[str, Any]] = Depends(verify_token)):
-    if user_info:
-        return {
-            "authenticated": True,
-            "user_id": user_info['user_id'],
-            "username": user_info['username'],
-            "is_admin": user_info['username'] == ADMIN_USERNAME
-        }
-    return {"authenticated": False}
+    if not user_info:
+        raise HTTPException(status_code=401, detail="未授权访问")
+
+    return {
+        "authenticated": True,
+        "user_id": user_info['user_id'],
+        "username": user_info['username'],
+        "is_admin": user_info['username'] == ADMIN_USERNAME
+    }
 
 
 # 登出接口
@@ -4255,6 +4256,12 @@ def get_all_items(current_user: Dict[str, Any] = Depends(get_current_user)):
             items = db_manager.get_items_by_cookie(cookie_id)
             all_items.extend(items)
 
+        # 兼容前端展示：前端会额外渲染 "¥"，这里剥离数据库中可能自带的货币符号，避免出现 "¥¥"
+        for item in all_items:
+            price = item.get("item_price")
+            if isinstance(price, str):
+                item["item_price"] = price.strip().lstrip("¥￥").strip()
+
         return {"items": all_items}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取商品信息失败: {str(e)}")
@@ -4440,6 +4447,90 @@ def get_items_by_cookie(cookie_id: str, current_user: Dict[str, Any] = Depends(g
         raise HTTPException(status_code=500, detail=f"获取商品信息失败: {str(e)}")
 
 
+class ItemCreateRequest(BaseModel):
+    item_id: str
+    item_title: Optional[str] = ''
+    item_description: Optional[str] = ''
+    item_category: Optional[str] = ''
+    item_price: Optional[str] = ''
+    item_image: Optional[str] = None
+    item_detail: Optional[Any] = None
+    is_multi_spec: Optional[bool] = False
+    multi_quantity_delivery: Optional[bool] = False
+
+
+@app.post("/items/cookie/{cookie_id}")
+def create_item_info(
+    cookie_id: str,
+    request: ItemCreateRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """手动创建商品（写入本地DB item_info）"""
+    try:
+        user_id = current_user['user_id']
+        from db_manager import db_manager
+        user_cookies = db_manager.get_all_cookies(user_id)
+
+        if cookie_id not in user_cookies:
+            raise HTTPException(status_code=403, detail="无权限访问该Cookie")
+
+        item_id = str(request.item_id or '').strip()
+        if not item_id:
+            raise HTTPException(status_code=400, detail="缺少 item_id")
+
+        item_title = (request.item_title or '').strip()
+        item_description = (request.item_description or '').strip()
+        item_category = (request.item_category or '').strip()
+        item_price = (request.item_price or '').strip()
+        is_multi_spec = bool(request.is_multi_spec) if request.is_multi_spec is not None else False
+        multi_quantity_delivery = bool(request.multi_quantity_delivery) if request.multi_quantity_delivery is not None else False
+
+        item_detail_to_save = ''
+        if request.item_detail is not None:
+            item_detail_to_save = request.item_detail if isinstance(request.item_detail, str) else json.dumps(request.item_detail, ensure_ascii=False)
+
+        if request.item_image:
+            try:
+                parsed = json.loads(item_detail_to_save) if item_detail_to_save else {}
+                if not isinstance(parsed, dict):
+                    parsed = {'raw': item_detail_to_save}
+            except Exception:
+                parsed = {'raw': item_detail_to_save} if item_detail_to_save else {}
+            parsed['item_image'] = request.item_image
+            item_detail_to_save = json.dumps(parsed, ensure_ascii=False)
+
+        with db_manager.lock:
+            cursor = db_manager.conn.cursor()
+            cursor.execute('''
+            INSERT INTO item_info (
+                cookie_id, item_id, item_title, item_description, item_category, item_price,
+                item_detail, is_multi_spec, multi_quantity_delivery, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ON CONFLICT(cookie_id, item_id) DO UPDATE SET
+                item_title = excluded.item_title,
+                item_description = excluded.item_description,
+                item_category = excluded.item_category,
+                item_price = excluded.item_price,
+                item_detail = excluded.item_detail,
+                is_multi_spec = excluded.is_multi_spec,
+                multi_quantity_delivery = excluded.multi_quantity_delivery,
+                updated_at = CURRENT_TIMESTAMP
+            ''', (
+                cookie_id, item_id, item_title, item_description, item_category, item_price,
+                item_detail_to_save, is_multi_spec, multi_quantity_delivery
+            ))
+            db_manager.conn.commit()
+
+        return {"success": True, "message": "商品已保存"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"手动创建商品失败: {e}")
+        raise HTTPException(status_code=500, detail=f"创建商品失败: {str(e)}")
+
+
 @app.get("/items/{cookie_id}/{item_id}")
 def get_item_detail(cookie_id: str, item_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
     """获取商品详情"""
@@ -4462,18 +4553,25 @@ def get_item_detail(cookie_id: str, item_id: str, current_user: Dict[str, Any] =
         raise HTTPException(status_code=500, detail=f"获取商品详情失败: {str(e)}")
 
 
-class ItemDetailUpdate(BaseModel):
-    item_detail: str
+class ItemUpdateRequest(BaseModel):
+    item_title: Optional[str] = None
+    item_description: Optional[str] = None
+    item_category: Optional[str] = None
+    item_price: Optional[str] = None
+    item_image: Optional[str] = None
+    item_detail: Optional[Any] = None
+    is_multi_spec: Optional[bool] = None
+    multi_quantity_delivery: Optional[bool] = None
 
 
 @app.put("/items/{cookie_id}/{item_id}")
 def update_item_detail(
     cookie_id: str,
     item_id: str,
-    update_data: ItemDetailUpdate,
+    update_data: ItemUpdateRequest,
     current_user: Dict[str, Any] = Depends(get_current_user)
 ):
-    """更新商品详情"""
+    """更新商品信息"""
     try:
         # 检查cookie是否属于当前用户
         user_id = current_user['user_id']
@@ -4483,11 +4581,85 @@ def update_item_detail(
         if cookie_id not in user_cookies:
             raise HTTPException(status_code=403, detail="无权限操作该Cookie")
 
-        success = db_manager.update_item_detail(cookie_id, item_id, update_data.item_detail)
-        if success:
-            return {"message": "商品详情更新成功"}
-        else:
-            raise HTTPException(status_code=400, detail="更新失败")
+        if not any(
+            getattr(update_data, field) is not None
+            for field in (
+                'item_title', 'item_description', 'item_category', 'item_price',
+                'item_image', 'item_detail', 'is_multi_spec', 'multi_quantity_delivery'
+            )
+        ):
+            raise HTTPException(status_code=400, detail="未提供任何更新字段")
+
+        update_fields = []
+        update_values: List[Any] = []
+
+        if update_data.item_title is not None:
+            update_fields.append("item_title = ?")
+            update_values.append(str(update_data.item_title))
+
+        if update_data.item_description is not None:
+            update_fields.append("item_description = ?")
+            update_values.append(str(update_data.item_description))
+
+        if update_data.item_category is not None:
+            update_fields.append("item_category = ?")
+            update_values.append(str(update_data.item_category))
+
+        if update_data.item_price is not None:
+            update_fields.append("item_price = ?")
+            update_values.append(str(update_data.item_price))
+
+        if update_data.is_multi_spec is not None:
+            update_fields.append("is_multi_spec = ?")
+            update_values.append(1 if update_data.is_multi_spec else 0)
+
+        if update_data.multi_quantity_delivery is not None:
+            update_fields.append("multi_quantity_delivery = ?")
+            update_values.append(1 if update_data.multi_quantity_delivery else 0)
+
+        item_detail_to_save = None
+        if update_data.item_detail is not None:
+            item_detail_to_save = update_data.item_detail if isinstance(update_data.item_detail, str) else json.dumps(update_data.item_detail, ensure_ascii=False)
+
+        if update_data.item_image is not None:
+            base_detail = item_detail_to_save
+            if base_detail is None:
+                with db_manager.lock:
+                    cursor = db_manager.conn.cursor()
+                    cursor.execute(
+                        'SELECT item_detail FROM item_info WHERE cookie_id = ? AND item_id = ?',
+                        (cookie_id, item_id)
+                    )
+                    row = cursor.fetchone()
+                    base_detail = row[0] if row and row[0] else ''
+
+            try:
+                parsed = json.loads(base_detail) if base_detail else {}
+                if not isinstance(parsed, dict):
+                    parsed = {'raw': base_detail}
+            except Exception:
+                parsed = {'raw': base_detail} if base_detail else {}
+
+            parsed['item_image'] = update_data.item_image
+            item_detail_to_save = json.dumps(parsed, ensure_ascii=False)
+
+        if item_detail_to_save is not None:
+            update_fields.append("item_detail = ?")
+            update_values.append(item_detail_to_save)
+
+        update_fields.append("updated_at = CURRENT_TIMESTAMP")
+
+        update_sql = f"UPDATE item_info SET {', '.join(update_fields)} WHERE cookie_id = ? AND item_id = ?"
+        update_values.extend([cookie_id, item_id])
+
+        with db_manager.lock:
+            cursor = db_manager.conn.cursor()
+            cursor.execute(update_sql, update_values)
+            if cursor.rowcount <= 0:
+                raise HTTPException(status_code=404, detail="商品不存在")
+            db_manager.conn.commit()
+
+        return {"message": "商品更新成功"}
     except HTTPException:
         raise
     except Exception as e:
@@ -5951,20 +6123,46 @@ def get_user_orders(
 
         # 获取所有订单数据
         all_orders = []
-        # 先获取所有商品的 item_id 到 item_title 的映射
-        item_titles = {}
+        # 先获取所有商品的 item_id -> {title, price, image} 映射（用于订单展示）
+        item_info_map: Dict[str, Dict[str, str]] = {}
         with db_manager.lock:
             cursor = db_manager.conn.cursor()
-            cursor.execute('SELECT item_id, item_title FROM item_info')
+            cursor.execute('SELECT item_id, item_title, item_price, item_detail FROM item_info')
             for row in cursor.fetchall():
-                item_titles[row[0]] = row[1]
+                item_id = str(row[0] or '').strip()
+                if not item_id:
+                    continue
+
+                item_title = row[1] or ''
+                item_price = row[2] or ''
+                if isinstance(item_price, str):
+                    item_price = item_price.strip().lstrip("¥￥").strip()
+
+                item_image = ''
+                item_detail = row[3] or ''
+                if isinstance(item_detail, str) and item_detail.strip():
+                    try:
+                        parsed = json.loads(item_detail)
+                    except Exception:
+                        parsed = None
+                    if isinstance(parsed, dict):
+                        item_image = db_manager._extract_item_image_url(parsed)
+
+                item_info_map[item_id] = {
+                    'item_title': item_title,
+                    'item_price': item_price,
+                    'item_image': item_image
+                }
 
         for cid in user_cookies.keys():
             orders = db_manager.get_orders_by_cookie(cid, limit=1000)
             for order in orders:
                 order['cookie_id'] = cid
-                # 添加 item_title 字段
-                order['item_title'] = item_titles.get(order.get('item_id'), '')
+                # 添加商品展示字段
+                item_info = item_info_map.get(str(order.get('item_id') or ''), {})
+                order['item_title'] = item_info.get('item_title', '')
+                order['item_price'] = item_info.get('item_price', '')
+                order['item_image'] = item_info.get('item_image', '')
                 # 状态筛选
                 if status and order.get('status') != status:
                     continue
@@ -6007,15 +6205,48 @@ def get_order_detail(order_id: str, current_user: Dict[str, Any] = Depends(get_c
         # 获取用户的所有Cookie
         user_cookies = db_manager.get_all_cookies(user_id)
 
-        # 在用户的订单中查找
-        for cookie_id in user_cookies.keys():
-            order = db_manager.get_order_by_id(order_id)
-            if order and order.get('cookie_id') == cookie_id:
-                log_with_user('info', f"订单详情查询成功: {order_id}", current_user)
-                return {"success": True, "data": order}
+        order = db_manager.get_order_by_id(order_id)
+        if not order:
+            log_with_user('warning', f"订单不存在: {order_id}", current_user)
+            raise HTTPException(status_code=404, detail="订单不存在")
 
-        log_with_user('warning', f"订单不存在或无权访问: {order_id}", current_user)
-        raise HTTPException(status_code=404, detail="订单不存在或无权访问")
+        if order.get('cookie_id') not in user_cookies:
+            log_with_user('warning', f"订单无权访问: {order_id}", current_user)
+            raise HTTPException(status_code=404, detail="订单不存在或无权访问")
+
+        # 补全商品展示字段
+        try:
+            with db_manager.lock:
+                cursor = db_manager.conn.cursor()
+                cursor.execute(
+                    'SELECT item_title, item_price, item_detail FROM item_info WHERE cookie_id = ? AND item_id = ? LIMIT 1',
+                    (order.get('cookie_id'), order.get('item_id'))
+                )
+                row = cursor.fetchone()
+
+            if row:
+                order['item_title'] = row[0] or ''
+
+                item_price = row[1] or ''
+                if isinstance(item_price, str):
+                    item_price = item_price.strip().lstrip("¥￥").strip()
+                order['item_price'] = item_price
+
+                item_image = ''
+                item_detail = row[2] or ''
+                if isinstance(item_detail, str) and item_detail.strip():
+                    try:
+                        parsed = json.loads(item_detail)
+                    except Exception:
+                        parsed = None
+                    if isinstance(parsed, dict):
+                        item_image = db_manager._extract_item_image_url(parsed)
+                order['item_image'] = item_image
+        except Exception:
+            pass
+
+        log_with_user('info', f"订单详情查询成功: {order_id}", current_user)
+        return {"success": True, "data": order}
 
     except HTTPException:
         raise
@@ -6343,9 +6574,10 @@ async def update_order(
 
 @app.post('/api/orders/refresh')
 async def refresh_orders_status(
-    cookie_id: Optional[str] = Form(None),
-    status: Optional[str] = Form(None),
-    current_user: Dict[str, Any] = Depends(get_current_user)
+    request: Request,
+    cookie_id: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     """
     智能刷新订单状态
@@ -6354,6 +6586,27 @@ async def refresh_orders_status(
     3. 更新数据库中有变化的订单
     """
     try:
+        # 兼容旧前端：允许从 FormData/JSON body 读取筛选参数，同时避免因缺失 boundary 导致 400
+        # - Query 优先（不触发 body 解析）
+        # - 仅当 query 未提供时再尝试解析 body，且解析失败不影响后续逻辑
+        if cookie_id is None and status is None:
+            content_type = (request.headers.get("content-type") or "").lower()
+            if "application/json" in content_type:
+                try:
+                    body = await request.json()
+                    if isinstance(body, dict):
+                        cookie_id = body.get("cookie_id") or body.get("cookieId")
+                        status = body.get("status")
+                except Exception:
+                    pass
+            elif "multipart/form-data" in content_type or "application/x-www-form-urlencoded" in content_type:
+                try:
+                    form = await request.form()
+                    cookie_id = form.get("cookie_id") or form.get("cookieId")
+                    status = form.get("status")
+                except Exception:
+                    pass
+
         from db_manager import db_manager
         from utils.order_fetcher_optimized import process_orders_batch
 
@@ -6397,9 +6650,26 @@ async def refresh_orders_status(
         log_with_user('info', f"找到 {len(orders_to_refresh)} 个需要刷新的订单", current_user)
 
         if not orders_to_refresh:
+            # 区分“数据库里没有任何订单”和“订单都处于稳定状态/筛选后为空”
+            total_orders_in_db = 0
+            try:
+                with db_manager.lock:
+                    cursor = db_manager.conn.cursor()
+                    for cid in user_cookies.keys():
+                        cursor.execute("SELECT COUNT(1) FROM orders WHERE cookie_id = ?", (cid,))
+                        row = cursor.fetchone()
+                        total_orders_in_db += int(row[0] if row else 0)
+            except Exception:
+                total_orders_in_db = 0
+
+            if total_orders_in_db == 0:
+                message = "数据库暂无订单；该功能只会刷新已入库订单状态，不会自动拉取历史订单列表。请先通过“插入订单/导入订单”导入，或等待新订单消息触发入库。"
+                log_with_user('warning', message, current_user)
+            else:
+                message = "没有需要刷新的订单（订单可能都处于稳定状态，或不符合筛选条件）"
             return JSONResponse({
                 "success": True,
-                "message": "没有需要刷新的订单",
+                "message": message,
                 "summary": {
                     "total": 0,
                     "updated": 0,
@@ -7095,16 +7365,16 @@ async def import_orders(
                     'receiver_name': 'receiver_name',
                     'receiver_phone': 'receiver_phone',
                     'receiver_address': 'receiver_address',
-                    'receiver_city': 'receiver_city',
                     'status': 'order_status',  # 注意：前端用 status，后端用 order_status
-                    'status_text': 'status_text',
-                    'order_time': 'order_time',
-                    'pay_time': 'pay_time',
+                    'order_status': 'order_status',
+                    'spec_name': 'spec_name',
+                    'spec_value': 'spec_value',
                     'quantity': 'quantity',
                     'amount': 'amount',
-                    'item_title': 'item_title',
-                    'item_price': 'item_price',
-                    'item_image': 'item_image'
+                    'is_bargain': 'is_bargain',
+                    'created_at': 'created_at',
+                    'order_time': 'created_at',
+                    'chat_id': 'chat_id',
                 }
 
                 # 遍历订单数据，添加到参数字典
@@ -7115,6 +7385,13 @@ async def import_orders(
 
                 # 使用 insert_or_update_order 统一处理
                 db_manager.insert_or_update_order(**insert_params)
+
+                receiver_city = order_data.get('receiver_city')
+                if receiver_city is not None:
+                    try:
+                        db_manager.update_order_address(order_id, receiver_city=str(receiver_city))
+                    except Exception:
+                        pass
 
                 results.append({
                     'order_id': order_id,
@@ -7149,6 +7426,112 @@ async def import_orders(
     except Exception as e:
         log_with_user('error', f"导入订单失败: {str(e)}", current_user)
         raise HTTPException(status_code=500, detail=f"导入订单失败: {str(e)}")
+
+
+@app.post('/api/orders/import-excel')
+async def import_orders_excel(
+    file: UploadFile = File(..., description="Excel文件(.xlsx/.xls)"),
+    current_user: Dict[str, Any] = Depends(get_current_user)
+):
+    """从Excel导入订单（服务端解析后复用 JSON 导入逻辑）"""
+    if not file.filename or not file.filename.endswith(('.xlsx', '.xls')):
+        raise HTTPException(status_code=400, detail="请上传Excel文件(.xlsx或.xls)")
+
+    try:
+        df = pd.read_excel(file.file)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Excel读取失败: {str(e)}")
+
+    if df is None or df.empty:
+        raise HTTPException(status_code=400, detail="Excel文件为空")
+
+    df.columns = [str(c).strip() for c in df.columns]
+
+    def pick_col(candidates: List[str]) -> Optional[str]:
+        for c in candidates:
+            if c in df.columns:
+                return c
+        return None
+
+    def norm_value(v: Any) -> Optional[str]:
+        if v is None:
+            return None
+        try:
+            if pd.isna(v):
+                return None
+        except Exception:
+            pass
+        if isinstance(v, bool):
+            return '1' if v else '0'
+        if isinstance(v, int):
+            return str(v)
+        if isinstance(v, float):
+            try:
+                if float(v).is_integer():
+                    return str(int(v))
+            except Exception:
+                pass
+            return str(v)
+        s = str(v).strip()
+        return s or None
+
+    order_id_col = pick_col(['order_id', '订单ID', '订单号', '订单编号', 'orderId', 'OrderID'])
+    cookie_id_col = pick_col(['cookie_id', 'Cookie ID', 'cookie', '账号ID', '账户ID', 'cookieId', 'CookieID'])
+
+    if not order_id_col:
+        raise HTTPException(status_code=400, detail="Excel文件缺少订单ID列（order_id/订单ID）")
+
+    from db_manager import db_manager
+    user_id = current_user['user_id']
+    user_cookies = db_manager.get_all_cookies(user_id)
+    default_cookie_id = next(iter(user_cookies.keys())) if len(user_cookies) == 1 else None
+
+    col_map = {
+        'item_id': pick_col(['item_id', '商品ID', '宝贝ID', 'itemId']),
+        'buyer_id': pick_col(['buyer_id', '买家ID', '买家', 'buyerId']),
+        'receiver_name': pick_col(['receiver_name', '收件人', '收货人', '姓名']),
+        'receiver_phone': pick_col(['receiver_phone', '收件人手机', '手机号', '电话']),
+        'receiver_address': pick_col(['receiver_address', '收货地址', '地址']),
+        'receiver_city': pick_col(['receiver_city', '城市', '收货城市']),
+        'status': pick_col(['status', '订单状态', 'order_status', 'orderStatus']),
+        'quantity': pick_col(['quantity', '数量']),
+        'amount': pick_col(['amount', '金额', '实付金额', '总价']),
+        'order_time': pick_col(['order_time', '下单时间', '创建时间']),
+    }
+
+    orders: List[Dict[str, Any]] = []
+    missing_cookie_rows = 0
+
+    for _, row in df.iterrows():
+        order_id = norm_value(row.get(order_id_col))
+        if not order_id:
+            continue
+
+        cookie_id = norm_value(row.get(cookie_id_col)) if cookie_id_col else None
+        if not cookie_id:
+            cookie_id = default_cookie_id
+        if not cookie_id:
+            missing_cookie_rows += 1
+            continue
+
+        order_data: Dict[str, Any] = {'order_id': order_id, 'cookie_id': cookie_id}
+        for field, col in col_map.items():
+            if not col:
+                continue
+            val = row.get(col)
+            sval = norm_value(val)
+            if sval is None:
+                continue
+            order_data[field] = sval
+
+        orders.append(order_data)
+
+    if not orders:
+        if missing_cookie_rows > 0:
+            raise HTTPException(status_code=400, detail="Excel中缺少 cookie_id 列，且当前用户存在多个账号；请补充 cookie_id 列后再导入。")
+        raise HTTPException(status_code=400, detail="Excel文件中没有有效的订单数据")
+
+    return await import_orders(orders=orders, current_user=current_user)
 
 
 # ==================== 前端 SPA Catch-All 路由 ====================
